@@ -1,0 +1,267 @@
+{
+  "name": "StudyFlow Webhook Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "studyflow/task",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f4ce9bf8-b74e-489d-8914-4229937d8a97",
+      "name": "Webhook",
+      "webhookId": "f09a1c55-be92-48d3-ab5e-4ad0cd2bd6fd"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a9b0f719-5198-48e6-b8c1-03e6d572f766",
+              "name": "student",
+              "value": "={{ $json.body.student }}",
+              "type": "string"
+            },
+            {
+              "id": "78b5124d-6a76-4a3f-8bf6-b7c71db5318e",
+              "name": "subject",
+              "value": "={{ $json.body.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "cd33ceb3-0bd6-4d1d-a12e-3d7532bc5a6e",
+              "name": "task",
+              "value": "={{ $json.body.task }}",
+              "type": "string"
+            },
+            {
+              "id": "0f016e46-9659-4feb-bd4d-6b9167d90153",
+              "name": "deadline",
+              "value": "={{ $json.body.deadline }}",
+              "type": "string"
+            },
+            {
+              "id": "412fe563-6f27-4c88-ab55-df5fb0d4545a",
+              "name": "priority",
+              "value": "={{ $json.body.priority }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "3da27815-52b7-4349-b5d7-df57192e3a89",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "YOUR_GEMINI_API_KEY_HERE",
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"You are StudyFlow, an AI academic assistant. Analyze this student's academic task and give a practical recommendation.\\n\\nStudent: {{ $json.student }}\\nSubject: {{ $json.subject }}\\nTask: {{ $json.task }}\\nDeadline: {{ $json.deadline }}\\nDays remaining: {{ $json.daysRemaining }}\\nUrgency: {{ $json.urgency }}\\nPriority: {{ $json.priority }}\\n\\nGive a concise recommendation explaining what the student should do next. Consider the deadline, urgency, and priority. Do not mention or output any template variables such as {{ $json.student }}. Use the actual values provided.\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        896,
+        0
+      ],
+      "id": "d70bcf59-3f79-4705-bee5-b31ab20d204b",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8e94e996-c1e1-4294-97f6-a84a9c23940b",
+              "name": "recommendation",
+              "value": "={{ $json.candidates[0].content.parts[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "8d653387-82f9-4654-b0bd-344e2caac8a4",
+      "name": "AI Recommendation"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst deadline = new Date(item.deadline);\nconst today = new Date();\n\n// Remove the time portion so we're comparing calendar days\ntoday.setHours(0, 0, 0, 0);\ndeadline.setHours(0, 0, 0, 0);\n\nconst differenceMs = deadline - today;\nconst daysRemaining = Math.ceil(\n  differenceMs / (1000 * 60 * 60 * 24)\n);\n\nlet urgency;\n\nif (daysRemaining < 0) {\n  urgency = \"Overdue\";\n} else if (daysRemaining <= 1) {\n  urgency = \"Urgent\";\n} else if (daysRemaining <= 3) {\n  urgency = \"High\";\n} else if (daysRemaining <= 7) {\n  urgency = \"Medium\";\n} else {\n  urgency = \"Low\";\n}\n\nreturn [\n  {\n    json: {\n      ...item,\n      daysRemaining,\n      urgency\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "df04f95b-a592-4576-a053-dc2498fd7001",
+      "name": "Deadline Intelligence"
+    },
+    {
+      "parameters": {
+        "table": {
+          "__rl": true,
+          "value": "tasks",
+          "mode": "list",
+          "cachedResultName": "tasks"
+        },
+        "dataMode": "defineBelow",
+        "valuesToSend": {
+          "values": [
+            {
+              "column": "student",
+              "value": "={{ $json.student }}"
+            },
+            {
+              "column": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "column": "task",
+              "value": "={{ $json.task }}"
+            },
+            {
+              "column": "deadline",
+              "value": "={{ $json.deadline }}"
+            },
+            {
+              "column": "priority",
+              "value": "={{ $json.priority }}"
+            },
+            {
+              "column": "days_remaining",
+              "value": "={{ $json.daysRemaining }}"
+            },
+            {
+              "column": "urgency",
+              "value": "={{ $json.urgency }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "03db4281-1b92-42f0-b371-9623833ac28d",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Deadline Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "AI Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deadline Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f242c6a3-1733-42d7-b4e3-39980c89267c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "CKU6oOy0XPcFEl3O",
+  "tags": []
+}
