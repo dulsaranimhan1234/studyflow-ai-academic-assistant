@@ -53,13 +53,13 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"You are StudyFlow, an AI academic daily planner.\\n\\nHere are the student's current tasks:\\n{{ JSON.stringify($json.tasks) }}\\n\\nCreate a practical daily study plan. Consider deadline, days remaining, urgency, and priority. Decide which tasks should receive attention first. Keep the plan concise and actionable.\"\n        }\n      ]\n    }\n  ]\n}",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"You are StudyFlow, an AI academic daily planner.\\n\\nCreate a practical study plan for today using these prioritized tasks:\\n\\n{{ JSON.stringify($json.prioritizedTasks) }}\\n\\nRules:\\n- Focus first on the most urgent tasks.\\n- Consider days remaining and priority.\\n- Give the student a clear order of what to work on.\\n- Keep the plan concise and practical.\\n- Do not mention JSON, code, or template variables.\\n- Do not invent tasks that are not provided.\"\n        }\n      ]\n    }\n  ]\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        672,
+        896,
         0
       ],
       "id": "cb6b6b3a-a882-4c86-85fa-8ff33437953a",
@@ -95,11 +95,24 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        896,
+        1120,
         0
       ],
       "id": "cdfae926-6fc4-4718-95bb-812a4f6eb1e6",
       "name": "Daily Plan"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst tasks = [...data.tasks];\n\nconst urgencyWeight = {\n  \"Overdue\": 1,\n  \"Urgent\": 2,\n  \"High\": 3,\n  \"Medium\": 4,\n  \"Low\": 5\n};\n\nconst priorityWeight = {\n  \"High\": 1,\n  \"Medium\": 2,\n  \"Low\": 3\n};\n\ntasks.sort((a, b) => {\n  // 1. Urgency first\n  const urgencyA = urgencyWeight[a.urgency] ?? 99;\n  const urgencyB = urgencyWeight[b.urgency] ?? 99;\n\n  if (urgencyA !== urgencyB) {\n    return urgencyA - urgencyB;\n  }\n\n  // 2. Earlier deadline first\n  const daysA = Number(a.days_remaining);\n  const daysB = Number(b.days_remaining);\n\n  if (daysA !== daysB) {\n    return daysA - daysB;\n  }\n\n  // 3. Higher priority first\n  const priorityA = priorityWeight[a.priority] ?? 99;\n  const priorityB = priorityWeight[b.priority] ?? 99;\n\n  return priorityA - priorityB;\n});\n\nreturn [\n  {\n    json: {\n      taskCount: tasks.length,\n      prioritizedTasks: tasks\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "16ee61a7-551e-40f6-8a99-159a7a6290de",
+      "name": "Priorotize task"
     }
   ],
   "pinData": {},
@@ -130,7 +143,7 @@
       "main": [
         [
           {
-            "node": "AI Planner",
+            "node": "Priorotize task",
             "type": "main",
             "index": 0
           }
@@ -147,6 +160,17 @@
           }
         ]
       ]
+    },
+    "Priorotize task": {
+      "main": [
+        [
+          {
+            "node": "AI Planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -154,7 +178,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "39b69635-d7e3-41d7-a62a-c6952bdb64b3",
+  "versionId": "62514cb4-f4ba-4eba-819e-ae0dec03f238",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
