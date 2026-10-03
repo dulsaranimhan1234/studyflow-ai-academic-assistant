@@ -1,0 +1,107 @@
+{
+  "name": "StudyFlow - Get Single Task",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "studyflow/tasks/:id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "08305354-e40c-478c-9c98-5624fcf82509",
+      "name": "Webhook",
+      "webhookId": "68b9c15c-92b1-42a9-831b-da59a41fb172"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "tasks",
+          "mode": "list",
+          "cachedResultName": "tasks"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "id",
+              "value": "={{ $json.params.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "0e633703-7b84-457f-85a3-15eac4cb57ab",
+      "name": "Select rows from a table",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "8887af10-8932-478b-8800-71f2ce217f68",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Select rows from a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select rows from a table": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "20eb7fee-aef9-4e4d-a354-9ad4384c40d6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "wPd8YUWwUTTu5coX",
+  "tags": []
+}
