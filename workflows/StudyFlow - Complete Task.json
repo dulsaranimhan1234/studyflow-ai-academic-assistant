@@ -1,0 +1,85 @@
+{
+  "name": "StudyFlow - Complete Task",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "studyflow/task/complete",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "78cdace2-2e10-46a3-9483-21c94608a216",
+      "name": "Webhook",
+      "webhookId": "72eafd68-627d-4a13-830a-a08da008566a"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": {
+          "__rl": true,
+          "value": "tasks",
+          "mode": "list",
+          "cachedResultName": "tasks"
+        },
+        "dataMode": "defineBelow",
+        "columnToMatchOn": "id",
+        "valueToMatchOn": "={{ $json.body.taskId }}",
+        "valuesToSend": {
+          "values": [
+            {
+              "column": "status",
+              "value": "completed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "3c6ce140-79fb-4472-b9ef-1077ee419a68",
+      "name": "Update rows in a table",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Update rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5a6165ce-33b5-432e-bd54-6fea1d53a00e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "qrTQpat7RyLqyjTQ",
+  "tags": []
+}
