@@ -1,0 +1,251 @@
+{
+  "name": "StudyFlow - Smart Task Insights",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "8a70c58e-dd72-4014-b708-b462a488e907",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "tasks",
+          "mode": "list",
+          "cachedResultName": "tasks"
+        },
+        "returnAll": true,
+        "where": {
+          "values": [
+            {
+              "column": "status",
+              "value": "pending"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "7ccb841e-966b-4239-b2ac-78094610b5d2",
+      "name": "Select rows from a table",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $input.all().map(item => item.json);\n\nconst totalTasks = tasks.length;\n\nconst urgentTasks = tasks.filter(\n  task => task.urgency === \"Urgent\" || task.urgency === \"Overdue\"\n).length;\n\nconst highUrgencyTasks = tasks.filter(\n  task => task.urgency === \"High\"\n).length;\n\nconst highPriorityTasks = tasks.filter(\n  task => task.priority === \"High\"\n).length;\n\nconst deadlinesWithin3Days = tasks.filter(\n  task => Number(task.days_remaining) <= 3\n).length;\n\nlet workloadLevel;\n\nif (totalTasks === 0) {\n  workloadLevel = \"None\";\n} else if (\n  urgentTasks > 0 ||\n  deadlinesWithin3Days >= 2 ||\n  totalTasks >= 6\n) {\n  workloadLevel = \"High\";\n} else if (\n  highUrgencyTasks > 0 ||\n  highPriorityTasks >= 2 ||\n  totalTasks >= 3\n) {\n  workloadLevel = \"Medium\";\n} else {\n  workloadLevel = \"Low\";\n}\n\nreturn [\n  {\n    json: {\n      totalTasks,\n      urgentTasks,\n      highUrgencyTasks,\n      highPriorityTasks,\n      deadlinesWithin3Days,\n      workloadLevel,\n      tasks\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "dfdafab2-4378-4d9d-a574-70fba8ce096d",
+      "name": "Workdload Analyzer"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst tasks = [...data.tasks];\n\nconst conflicts = [];\n\nfor (let i = 0; i < tasks.length; i++) {\n  for (let j = i + 1; j < tasks.length; j++) {\n\n    const taskA = tasks[i];\n    const taskB = tasks[j];\n\n    const daysA = Number(taskA.days_remaining);\n    const daysB = Number(taskB.days_remaining);\n\n    const difference = Math.abs(daysA - daysB);\n\n    if (difference <= 1) {\n      conflicts.push({\n        task1: taskA.task,\n        subject1: taskA.subject,\n        deadline1: taskA.deadline,\n\n        task2: taskB.task,\n        subject2: taskB.subject,\n        deadline2: taskB.deadline,\n\n        daysDifference: difference\n      });\n    }\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...data,\n      deadlineConflicts: conflicts,\n      conflictCount: conflicts.length\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "8c340481-eba3-4d86-a182-99812c0fc497",
+      "name": "Deadline Conflict Detector"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst recommended = data.recommendedTask;\n\nconst summary = {\n  totalPendingTasks: data.totalTasks,\n  workloadLevel: data.workloadLevel,\n  highUrgencyTasks: data.highUrgencyTasks,\n  highPriorityTasks: data.highPriorityTasks,\n  deadlinesWithin3Days: data.deadlinesWithin3Days,\n  deadlineConflicts: data.conflictCount,\n\n  recommendedTask: {\n    subject: recommended.subject,\n    task: recommended.task,\n    deadline: recommended.deadline,\n    daysRemaining: recommended.days_remaining,\n    priority: recommended.priority,\n    urgency: recommended.urgency,\n    recommendationScore: recommended.recommendationScore\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...data,\n      dailySummary: summary\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "c3674753-767b-4c02-a503-ec27e2a4ed3a",
+      "name": "Daily Academic Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst tasks = [...data.tasks];\n\nconst urgencyWeight = {\n  \"Overdue\": 1,\n  \"Urgent\": 2,\n  \"High\": 3,\n  \"Medium\": 4,\n  \"Low\": 5\n};\n\nconst priorityWeight = {\n  \"High\": 1,\n  \"Medium\": 2,\n  \"Low\": 3\n};\n\n// Calculate a score for every task\nconst scoredTasks = tasks.map(task => {\n  const urgencyScore = urgencyWeight[task.urgency] ?? 99;\n  const priorityScore = priorityWeight[task.priority] ?? 99;\n  const daysRemaining = Number(task.days_remaining);\n\n  let score = 0;\n\n  // More urgent = higher score\n  score += (6 - urgencyScore) * 10;\n\n  // Less time remaining = higher score\n  if (daysRemaining <= 1) {\n    score += 30;\n  } else if (daysRemaining <= 3) {\n    score += 20;\n  } else if (daysRemaining <= 7) {\n    score += 10;\n  }\n\n  // Higher priority = higher score\n  score += (4 - priorityScore) * 5;\n\n  // Deadline conflict gets additional importance\n  const hasConflict = data.deadlineConflicts.some(conflict =>\n    conflict.task1 === task.task ||\n    conflict.task2 === task.task\n  );\n\n  if (hasConflict) {\n    score += 15;\n  }\n\n  return {\n    ...task,\n    recommendationScore: score,\n    hasDeadlineConflict: hasConflict\n  };\n});\n\n// Highest score first\nscoredTasks.sort(\n  (a, b) => b.recommendationScore - a.recommendationScore\n);\n\nconst recommendedTask = scoredTasks[0];\n\nreturn [\n  {\n    json: {\n      ...data,\n      recommendedTask,\n      rankedTasks: scoredTasks\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "88bc67ce-81e8-4d48-9056-f0214de17693",
+      "name": "Study Recommendation Engine"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "YOUR_GEMINI_API_KEY_HERE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"You are StudyFlow, an AI academic assistant. Analyze the student's current academic workload and provide a concise, practical insight.\\n\\nStudent: {{ $json.tasks[0].student }}\\n\\nWorkload level: {{ $json.workloadLevel }}\\nTotal pending tasks: {{ $json.totalTasks }}\\nHigh urgency tasks: {{ $json.highUrgencyTasks }}\\nHigh priority tasks: {{ $json.highPriorityTasks }}\\nDeadlines within 3 days: {{ $json.deadlinesWithin3Days }}\\nDeadline conflicts: {{ $json.conflictCount }}\\n\\nRecommended first task:\\nSubject: {{ $json.recommendedTask.subject }}\\nTask: {{ $json.recommendedTask.task }}\\nDeadline: {{ $json.recommendedTask.deadline }}\\nDays remaining: {{ $json.recommendedTask.days_remaining }}\\nPriority: {{ $json.recommendedTask.priority }}\\nUrgency: {{ $json.recommendedTask.urgency }}\\n\\nDeadline conflicts:\\n{{ $json.deadlineConflicts.map(c => c.subject1 + ' — ' + c.task1 + ' (deadline: ' + c.deadline1 + ') and ' + c.subject2 + ' — ' + c.task2 + ' (deadline: ' + c.deadline2 + ')').join('\\\\n') }}\\n\\nProvide:\\n1. A short assessment of the student's workload.\\n2. The most important task to start with and why.\\n3. One practical suggestion for managing the remaining tasks.\\n\\nKeep the response concise and actionable. Do not invent tasks or information.\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "9a1d91b8-72b5-4df4-a560-f322ab0e59a5",
+      "name": "AI Academic Insights"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "005aaef7-66cf-47b8-a87f-69385eedee8b",
+              "name": "aiInsight",
+              "value": "={{ $json.candidates[0].content.parts[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "7510a04c-50c7-44b7-9b69-f577ead81672",
+      "name": "Extract AI Insight"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Select rows from a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select rows from a table": {
+      "main": [
+        [
+          {
+            "node": "Workdload Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workdload Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Deadline Conflict Detector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deadline Conflict Detector": {
+      "main": [
+        [
+          {
+            "node": "Study Recommendation Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Study Recommendation Engine": {
+      "main": [
+        [
+          {
+            "node": "Daily Academic Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Academic Summary": {
+      "main": [
+        [
+          {
+            "node": "AI Academic Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Academic Insights": {
+      "main": [
+        [
+          {
+            "node": "Extract AI Insight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5e71a0ce-cf3f-4bfc-98e5-aab0adfaeff3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "Zyfl5m4BBozXugGZ",
+  "tags": []
+}
