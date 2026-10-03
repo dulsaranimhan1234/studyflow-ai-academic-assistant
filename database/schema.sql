@@ -11,5 +11,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     priority VARCHAR(20),
     days_remaining INT,
     urgency VARCHAR(20),
+    status VARCHAR(20) DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
