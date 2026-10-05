@@ -1,0 +1,364 @@
+{
+  "name": "StudyFlow - Natural Language Task Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "studyflow/assistant",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "8ff95102-a6b1-44c1-9a11-6b27709f463b",
+      "name": "Webhook",
+      "webhookId": "9300a878-c063-45ec-a428-8f613e0999d7"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5b8338ee-99b9-4b6e-8317-c11bc06efd38",
+              "name": "userMessage",
+              "value": "={{ $json.body.message }}",
+              "type": "string"
+            },
+            {
+              "id": "fb2c91f7-ce4a-49ec-96b9-c4c69eee1493",
+              "name": "student",
+              "value": "={{ $json.body.student }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "a5919a33-9e12-4682-921d-70e583e99eea",
+      "name": "Prepare User Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "YOUR_GEMINI_API_KEY_HERE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"You are StudyFlow, an AI academic task interpreter.\\n\\nConvert the student's natural language request into structured academic task information.\\n\\nToday's date: {{ $now.format('yyyy-MM-dd') }}\\n\\nStudent message:\\n{{ $json.userMessage }}\\n\\nExtract these fields:\\n- subject\\n- task\\n- deadline\\n- priority\\n\\nRules:\\n1. Return ONLY valid JSON.\\n2. Do not use Markdown.\\n3. Do not add explanations.\\n4. If a field is not provided, use null.\\n5. Use the deadline format YYYY-MM-DD when a specific date is provided.\\n6. Priority must be High, Medium, or Low when provided.\\n7. When the student gives a date without a year, assume the next occurrence of that date relative to today's date.\\n8. Never return a date in the past when a future occurrence is possible.\\n9. If the student says a relative date such as tomorrow, next Monday, or next week, calculate the date relative to today's date.\\n\\nReturn exactly this structure:\\n{\\n  \\\"subject\\\": \\\"...\\\",\\n  \\\"task\\\": \\\"...\\\",\\n  \\\"deadline\\\": \\\"YYYY-MM-DD\\\",\\n  \\\"priority\\\": \\\"High\\\"\\n}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "d52105fd-77a1-4dc3-aefe-ea05853be76d",
+      "name": "AI Interpreter",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\n\nconst rawText = response.candidates[0].content.parts[0].text;\n\nconst cleanedText = rawText\n  .replace(/```json/g, \"\")\n  .replace(/```/g, \"\")\n  .trim();\n\nlet taskData;\n\ntry {\n  taskData = JSON.parse(cleanedText);\n} catch (error) {\n  throw new Error(\"AI response is not valid JSON: \" + cleanedText);\n}\n\nreturn [\n  {\n    json: {\n      student: $('Webhook').first().json.body.student,\n      subject: taskData.subject,\n      task: taskData.task,\n      deadline: taskData.deadline,\n      priority: taskData.priority\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "216cb118-fd97-4fc1-9336-ffe8f9a381f9",
+      "name": "Parse AI Task"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst deadline = new Date(item.deadline);\nconst today = new Date();\n\ntoday.setHours(0, 0, 0, 0);\ndeadline.setHours(0, 0, 0, 0);\n\nconst differenceMs = deadline - today;\n\nconst daysRemaining = Math.ceil(\n  differenceMs / (1000 * 60 * 60 * 24)\n);\n\nlet urgency;\n\nif (daysRemaining < 0) {\n  urgency = \"Overdue\";\n} else if (daysRemaining <= 1) {\n  urgency = \"Urgent\";\n} else if (daysRemaining <= 3) {\n  urgency = \"High\";\n} else if (daysRemaining <= 7) {\n  urgency = \"Medium\";\n} else {\n  urgency = \"Low\";\n}\n\nreturn [\n  {\n    json: {\n      ...item,\n      daysRemaining,\n      urgency,\n      status: \"pending\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        -192
+      ],
+      "id": "b75fd27f-b7eb-4a13-adb2-a06ef78e6c1d",
+      "name": "Deadline Intelligence"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7650b179-8e98-411b-9aa1-0aeecb2246be",
+              "leftValue": "={{ $json.subject }}",
+              "rightValue": "=is not empty",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "7c58997a-09e3-4e4f-967a-3ddb0c262853",
+              "leftValue": "={{ $json.task }}",
+              "rightValue": "is not empty",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "83d3c2da-66d9-4108-8987-33784813a97d",
+              "leftValue": "={{ $json.deadline }}",
+              "rightValue": "is not empty",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "555ef952-3638-45c7-ab1b-93d6f9015c6d",
+              "leftValue": "={{ $json.priority }}",
+              "rightValue": "is not empty",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        896,
+        0
+      ],
+      "id": "d5f85f80-7905-42aa-83e7-78f63a921975",
+      "name": "Validate Task"
+    },
+    {
+      "parameters": {
+        "table": {
+          "__rl": true,
+          "value": "tasks",
+          "mode": "list",
+          "cachedResultName": "tasks"
+        },
+        "dataMode": "defineBelow",
+        "valuesToSend": {
+          "values": [
+            {
+              "column": "student",
+              "value": "={{ $json.student }}"
+            },
+            {
+              "column": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "column": "task",
+              "value": "={{ $json.task }}"
+            },
+            {
+              "column": "deadline",
+              "value": "={{ $json.deadline }}"
+            },
+            {
+              "column": "priority",
+              "value": "={{ $json.priority }}"
+            },
+            {
+              "column": "days_remaining",
+              "value": "={{ $json.daysRemaining }}"
+            },
+            {
+              "column": "urgency",
+              "value": "={{ $json.urgency }}"
+            },
+            {
+              "column": "status",
+              "value": "={{ $json.status }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        1328,
+        0
+      ],
+      "id": "0db9e1f1-c2a1-42d4-a6a9-45939971a07e",
+      "name": "Creat Task",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const task = $('Deadline Intelligence').first().json;\n\nreturn [\n  {\n    json: {\n      success: true,\n      message: \"Task created successfully\",\n      task: {\n        student: task.student,\n        subject: task.subject,\n        task: task.task,\n        deadline: task.deadline,\n        priority: task.priority,\n        daysRemaining: task.daysRemaining,\n        urgency: task.urgency,\n        status: task.status\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        0
+      ],
+      "id": "40d69f45-e949-4d2a-8f95-3dc14023522d",
+      "name": "Success Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      success: false,\n      message: \"I couldn't understand all the required task details.\",\n      requiredFields: [\n        \"subject\",\n        \"task\",\n        \"deadline\",\n        \"priority\"\n      ],\n      hint: \"Please provide the subject, task, deadline, and priority.\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        208
+      ],
+      "id": "95fe27f0-7bb1-4fe2-8cd5-05d4c99d397c",
+      "name": "Validation Error Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare User Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare User Request": {
+      "main": [
+        [
+          {
+            "node": "AI Interpreter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Interpreter": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Task": {
+      "main": [
+        [
+          {
+            "node": "Validate Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deadline Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Creat Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Task": {
+      "main": [
+        [
+          {
+            "node": "Deadline Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Creat Task": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2c9213de-6578-4cea-a576-8c763021fb02",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "06N1Yphr8Y3NdVgh",
+  "tags": []
+}
