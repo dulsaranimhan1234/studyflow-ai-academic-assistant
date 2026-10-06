@@ -1,0 +1,132 @@
+{
+  "name": "StudyFlow - Urgent Task Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6ecb09ec-24f6-4461-9676-7a424b3b1787",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    id,\n    student,\n    subject,\n    task,\n    deadline,\n    priority,\n    DATEDIFF(deadline, CURDATE()) AS days_remaining,\n    CASE\n        WHEN DATEDIFF(deadline, CURDATE()) < 0 THEN 'Overdue'\n        WHEN DATEDIFF(deadline, CURDATE()) <= 1 THEN 'Urgent'\n        WHEN DATEDIFF(deadline, CURDATE()) <= 3 THEN 'High'\n        WHEN DATEDIFF(deadline, CURDATE()) <= 7 THEN 'Medium'\n        ELSE 'Low'\n    END AS urgency,\n    status\nFROM tasks\nWHERE status = 'pending'\n  AND DATEDIFF(deadline, CURDATE()) <= 1\nORDER BY days_remaining ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "1e03b42a-904f-44d5-9305-e479fa82e9aa",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $input.all().map(item => item.json);\n\nreturn tasks.map(task => {\n  const reminderMessage =\n    `🚨 URGENT TASK ALERT: ${task.subject} — ${task.task} ` +\n    `is due on ${task.deadline} (${task.days_remaining} days remaining). ` +\n    `Priority: ${task.priority}.`;\n\n  return {\n    json: {\n      ...task,\n      reminderMessage\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "83947184-a0df-4080-89f0-0dcbb0f9b486",
+      "name": "Prepare Urgent Alerts"
+    },
+    {
+      "parameters": {
+        "fromEmail": "dulsarajayasuriya2003@gmail.com",
+        "toEmail": "dulsarabc@gmail.com",
+        "subject": "=🚨 StudyFlow Urgent Task Alert — {{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "=Hi {{ $json.student }},\n\nThis is an urgent StudyFlow academic alert.\n\nSubject: {{ $json.subject }}\nTask: {{ $json.task }}\nDeadline: {{ $json.deadline }}\nDays remaining: {{ $json.days_remaining }}\nPriority: {{ $json.priority }}\nUrgency: {{ $json.urgency }}\n\n{{ $json.reminderMessage }}\n\nPlease prioritize this task.\n\n— StudyFlow",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        672,
+        0
+      ],
+      "id": "1cae8b3f-3f62-4d16-8399-c7f0dc138ad9",
+      "name": "Send an Email",
+      "webhookId": "906ae7e2-87e7-49df-91da-05e52a5f2ca4",
+      "credentials": {
+        "smtp": {
+          "id": "3ALU7bCAdXExa0Yy",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Prepare Urgent Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Urgent Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "06cf6f25-8c43-4e67-9f4a-c41f20c7afea",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "y0DeMwrrXvZdttVz",
+  "tags": []
+}
