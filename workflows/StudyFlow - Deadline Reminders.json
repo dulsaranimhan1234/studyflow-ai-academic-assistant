@@ -1,0 +1,176 @@
+{
+  "name": "StudyFlow - Deadline Reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2d489801-1c4b-49e6-b29d-cf2d0a9473d0",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    id,\n    student,\n    subject,\n    task,\n    deadline,\n    priority,\n    days_remaining,\n    urgency,\n    status\nFROM tasks\nWHERE status = 'pending'\n  AND days_remaining <= 3\nORDER BY days_remaining ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "cf0c6d77-0efc-4572-b93c-617ff46826aa",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $input.all().map(item => item.json);\n\nreturn tasks.map(task => {\n  let reminderMessage;\n\n  if (Number(task.days_remaining) < 0) {\n    reminderMessage =\n      `⚠️ OVERDUE: ${task.subject} — ${task.task} was due on ${task.deadline}.`;\n  } else if (Number(task.days_remaining) === 0) {\n    reminderMessage =\n      `🚨 DUE TODAY: ${task.subject} — ${task.task}.`;\n  } else if (Number(task.days_remaining) === 1) {\n    reminderMessage =\n      `⏰ DUE TOMORROW: ${task.subject} — ${task.task}.`;\n  } else {\n    reminderMessage =\n      `📚 Deadline Reminder: ${task.subject} — ${task.task} is due in ${task.days_remaining} days (${task.deadline}).`;\n  }\n\n  return {\n    json: {\n      ...task,\n      reminderMessage\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "915c7e71-52fd-4113-ad84-655a6f20afb6",
+      "name": "Prepare Deadline Reminders"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1b0cde06-1ee0-4901-b5dc-df73cce1d6b6",
+              "leftValue": "={{ $json.days_remaining }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "8454f5e8-3167-41d6-9d76-1ca30f5184ff",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "fromEmail": "dulsarajayasuriya2003@gmail.com",
+        "toEmail": "dulsarabc@gmail.com",
+        "subject": "=StudyFlow Deadline Reminder — {{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "=Hi {{ $json.student }},\n\nThis is a StudyFlow deadline reminder.\n\nSubject: {{ $json.subject }}\nTask: {{ $json.task }}\nDeadline: {{ $json.deadline }}\nDays remaining: {{ $json.days_remaining }}\nPriority: {{ $json.priority }}\nUrgency: {{ $json.urgency }}\n\n{{ $json.reminderMessage }}\n\nPlease plan your study time accordingly.\n\n— StudyFlow",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        896,
+        -96
+      ],
+      "id": "48ab0590-c65f-4829-bdd6-77824dcb69ba",
+      "name": "Send an Email",
+      "webhookId": "8f18c982-404d-40ac-a2c3-5a00365a8a7b",
+      "credentials": {
+        "smtp": {
+          "id": "3ALU7bCAdXExa0Yy",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Prepare Deadline Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Deadline Reminders": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2b69240e-b58f-4952-b00a-3741abde1d06",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "glT2snHIZiHExQiu",
+  "tags": []
+}
