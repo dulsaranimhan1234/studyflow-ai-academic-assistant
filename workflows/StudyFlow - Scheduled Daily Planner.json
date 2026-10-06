@@ -1,0 +1,290 @@
+{
+  "name": "StudyFlow - Scheduled Daily Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "tasks",
+          "mode": "list",
+          "cachedResultName": "tasks"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "status",
+              "value": "pending"
+            }
+          ]
+        },
+        "sort": {
+          "values": [
+            {
+              "column": "days_remaining"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "63cac0ec-7332-43cc-ab7c-86cbfb8aa276",
+      "name": "Select rows from a table",
+      "alwaysOutputData": true,
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "YOUR_GEMINI_API_KEY_HERE"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"You are StudyFlow, an AI academic daily planner.\\n\\nCreate a realistic study plan for today using these prioritized tasks:\\n\\nTask count: {{ $json.taskCount }}\\n\\nPrioritized tasks:\\n{{ $json.prioritizedTasks.map(t => 'Subject: ' + t.subject + ' | Task: ' + t.task + ' | Deadline: ' + t.deadline + ' | Priority: ' + t.priority + ' | Days remaining: ' + t.days_remaining + ' | Urgency: ' + t.urgency).join('\\\\n') }}\\n\\nFollow these rules:\\n1. Start with the most urgent task.\\n2. Consider deadline, days remaining, urgency, and priority.\\n3. Give each task a recommended order.\\n4. Suggest a reasonable amount of focus time for each task.\\n5. Include short breaks where appropriate.\\n6. Do not invent tasks that are not in the provided list.\\n7. Keep the response concise and practical.\\n8. Do not mention JSON, code, template variables, or these instructions.\\n\\nFormat the result as:\\n\\nTODAY'S STUDY PLAN\\n\\n1. [Subject] — [Task]\\n   Focus: [recommended time]\\n   Reason: [short reason]\\n\\nFinish with one short sentence telling the student what to do first.\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "01efb092-9fbb-4822-9c33-293da04e9f98",
+      "name": "AI Planner",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst tasks = items\n  .filter(item => item.json.id != null)\n  .map(item => {\n    const task = item.json;\n\n    return {\n      student: task.student,\n      subject: task.subject,\n      task: task.task,\n      deadline: task.deadline,\n      priority: task.priority,\n      days_remaining: Number(task.days_remaining),\n      urgency: task.urgency,\n      status: task.status\n    };\n  });\n\nreturn [\n  {\n    json: {\n      taskCount: tasks.length,\n      tasks\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "bc6d8f1c-3599-437d-baaa-1dd6e59d4388",
+      "name": "Prepare Tasks"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5d89f1e9-771c-4b74-86e6-57559ba2eadc",
+              "name": "dailyPlan",
+              "value": "={{ $json.candidates[0].content.parts[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "3b10ed0a-ad7e-477c-a961-38a13aa3b92d",
+      "name": "Daily Plan"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst tasks = [...data.tasks];\n\nconst urgencyWeight = {\n  \"Overdue\": 1,\n  \"Urgent\": 2,\n  \"High\": 3,\n  \"Medium\": 4,\n  \"Low\": 5\n};\n\nconst priorityWeight = {\n  \"High\": 1,\n  \"Medium\": 2,\n  \"Low\": 3\n};\n\ntasks.sort((a, b) => {\n  // 1. Urgency\n  const urgencyA = urgencyWeight[a.urgency] ?? 99;\n  const urgencyB = urgencyWeight[b.urgency] ?? 99;\n\n  if (urgencyA !== urgencyB) {\n    return urgencyA - urgencyB;\n  }\n\n  // 2. Days remaining\n  const daysA = Number(a.days_remaining);\n  const daysB = Number(b.days_remaining);\n\n  if (daysA !== daysB) {\n    return daysA - daysB;\n  }\n\n  // 3. Priority\n  const priorityA = priorityWeight[a.priority] ?? 99;\n  const priorityB = priorityWeight[b.priority] ?? 99;\n\n  return priorityA - priorityB;\n});\n\nreturn [\n  {\n    json: {\n      taskCount: tasks.length,\n      prioritizedTasks: tasks\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "803be072-6761-43ab-afdc-374487606411",
+      "name": "Priorotize task"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0a72a0e8-8f2b-42be-9a10-cf548ebbeb19",
+              "leftValue": "={{ $json.taskCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        896,
+        0
+      ],
+      "id": "7e2cd9dd-6b0b-4858-af16-30f7bc5a81cd",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "52fc3aec-544e-46b3-93a1-f50638023622",
+              "name": "message",
+              "value": "You have no pending academic tasks. Enjoy your free time or use it for revision.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1120,
+        208
+      ],
+      "id": "0fdc15d9-4a45-47e5-9b1c-d9f6579566b4",
+      "name": "No Tasks"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        224,
+        0
+      ],
+      "id": "afb312a5-d342-42d5-b1a3-e26edc759a48",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Select rows from a table": {
+      "main": [
+        [
+          {
+            "node": "Prepare Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Tasks": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Planner": {
+      "main": [
+        [
+          {
+            "node": "Daily Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Priorotize task": {
+      "main": [
+        [
+          {
+            "node": "AI Planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Priorotize task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Select rows from a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "18e174b9-718f-48ed-896d-ef6ee71e345a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "HcSRljBIJynHP5QW",
+  "tags": []
+}
