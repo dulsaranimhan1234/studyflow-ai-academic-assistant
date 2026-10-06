@@ -1,0 +1,132 @@
+{
+  "name": "StudyFlow - Overdue Task Detection",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9b2b6253-b1f2-4e30-bbd8-368557c51a29",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    id,\n    student,\n    subject,\n    task,\n    deadline,\n    priority,\n    DATEDIFF(deadline, CURDATE()) AS days_overdue,\n    'Overdue' AS urgency,\n    status\nFROM tasks\nWHERE status = 'pending'\n  AND deadline < CURDATE()\nORDER BY deadline ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "29e31d0a-568a-41b6-b8a3-6bba3704a6ab",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $input.all().map(item => item.json);\n\nreturn tasks.map(task => {\n  const daysOverdue = Math.abs(Number(task.days_overdue));\n\n  const reminderMessage =\n    `🚨 OVERDUE TASK: ${task.subject} — ${task.task} ` +\n    `was due on ${task.deadline} and is ${daysOverdue} day(s) overdue. ` +\n    `Priority: ${task.priority}.`;\n\n  return {\n    json: {\n      ...task,\n      reminderMessage\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "a910db3e-b89b-4f55-9246-4ae91967fa6b",
+      "name": "Prepare Overdue Alerts"
+    },
+    {
+      "parameters": {
+        "fromEmail": "dulsarajayasuriya2003@gmail.com",
+        "toEmail": "dulsarabc@gmail.com",
+        "subject": "=🚨 StudyFlow Overdue Task — {{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "=Hi {{ $json.student }},\n\nThis is an important StudyFlow overdue-task alert.\n\nSubject: {{ $json.subject }}\nTask: {{ $json.task }}\nDeadline: {{ $json.deadline }}\nDays Overdue: {{ $json.days_overdue }}\nPriority: {{ $json.priority }}\nStatus: {{ $json.status }}\n\n{{ $json.reminderMessage }}\n\nPlease review this task and update your study plan.\n\n— StudyFlow",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        672,
+        0
+      ],
+      "id": "5e5bf4a4-f78c-4eab-883c-cd76df16e9d4",
+      "name": "Send an Email",
+      "webhookId": "db167c35-4a51-4dec-b0ae-a97110d1f32d",
+      "credentials": {
+        "smtp": {
+          "id": "3ALU7bCAdXExa0Yy",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Prepare Overdue Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Overdue Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "84c25e2a-047b-4a9d-bbc2-4ab69237899b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "xk9K611HP6rTelf8",
+  "tags": []
+}
