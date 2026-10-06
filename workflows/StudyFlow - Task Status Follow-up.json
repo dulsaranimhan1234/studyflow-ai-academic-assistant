@@ -1,0 +1,176 @@
+{
+  "name": "StudyFlow - Task Status Follow-up",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2ca51f90-df05-4412-976d-a21752d9c139",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    id,\n    student,\n    subject,\n    task,\n    deadline,\n    priority,\n    DATEDIFF(deadline, CURDATE()) AS days_remaining,\n    DATEDIFF(CURDATE(), DATE(created_at)) AS days_pending,\n    status,\n    created_at\nFROM tasks\nWHERE status = 'pending'\n  AND DATEDIFF(CURDATE(), DATE(created_at)) >= 3\nORDER BY created_at ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "dde3cbf9-d08d-4aa8-b316-0109de9e54bc",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $input.all().map(item => item.json);\n\nreturn tasks.map(task => {\n  const daysPending = Number(task.days_pending);\n\n  let followUpMessage;\n\n  if (daysPending >= 7) {\n    followUpMessage =\n      `🔴 This task has remained pending for ${daysPending} days. ` +\n      `Please review its progress and update its status.`;\n  } else {\n    followUpMessage =\n      `🟡 This task has remained pending for ${daysPending} days. ` +\n      `Please check your progress and update its status if necessary.`;\n  }\n\n  return {\n    json: {\n      ...task,\n      followUpMessage\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "1f9ee9a1-21b8-4dd2-8a69-5540302853d0",
+      "name": "Prepare Follow-up Alerts"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "602c9b30-627a-42d9-89e6-dba8d842b5c2",
+              "leftValue": "={{ $json.days_pending }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "decb1a69-7f78-4ebc-8de1-fde55e539194",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "fromEmail": "dulsarajayasuriya2003@gmail.com",
+        "toEmail": "dulsarabc@gmail.com",
+        "subject": "=📋 StudyFlow Task Status Follow-up — {{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "=Hi {{ $json.student }},\n\nThis is a StudyFlow task-status follow-up.\n\nYou still have a pending academic task:\n\nSubject: {{ $json.subject }}\nTask: {{ $json.task }}\n\nCreated: {{ $json.created_at }}\nDays pending: {{ $json.days_pending }}\nDeadline: {{ $json.deadline }}\nDays remaining: {{ $json.days_remaining }}\nPriority: {{ $json.priority }}\nCurrent status: {{ $json.status }}\n\n{{ $json.followUpMessage }}\n\nPlease review the task and update its status when appropriate.\n\n— StudyFlow",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        896,
+        -96
+      ],
+      "id": "3c381cfa-09f8-4358-92fc-9ff91b2c066c",
+      "name": "Send an Email",
+      "webhookId": "93cb35ba-dea9-413d-9646-9057fa1a7f05",
+      "credentials": {
+        "smtp": {
+          "id": "3ALU7bCAdXExa0Yy",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Prepare Follow-up Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Follow-up Alerts": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "45825014-eb6d-46f3-b8e5-a10812645fa0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "fbQNbtKPqFnrFI1P",
+  "tags": []
+}
