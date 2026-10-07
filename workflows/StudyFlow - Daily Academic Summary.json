@@ -1,0 +1,201 @@
+{
+  "name": "StudyFlow - Daily Academic Summary",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "af80129d-3728-4906-b4d5-92ef3c85b9f1",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    id,\n    student,\n    subject,\n    task,\n    deadline,\n    priority,\n    DATEDIFF(deadline, CURDATE()) AS days_remaining,\n    CASE\n        WHEN DATEDIFF(deadline, CURDATE()) < 0 THEN 'Overdue'\n        WHEN DATEDIFF(deadline, CURDATE()) <= 1 THEN 'Urgent'\n        WHEN DATEDIFF(deadline, CURDATE()) <= 3 THEN 'High'\n        WHEN DATEDIFF(deadline, CURDATE()) <= 7 THEN 'Medium'\n        ELSE 'Low'\n    END AS urgency,\n    status\nFROM tasks\nWHERE status = 'pending'\nORDER BY deadline ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "475b35dc-5adb-4763-9b62-1f11bb92d9a2",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "mySql": {
+          "id": "mN4GsCqluHRoxvkj",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $input.all().map(item => item.json);\n\nif (tasks.length === 0) {\n  return [{\n    json: {\n      hasTasks: false,\n      taskCount: 0,\n      summaryData: \"There are no pending academic tasks.\"\n    }\n  }];\n}\n\nconst totalTasks = tasks.length;\n\nconst urgentTasks = tasks.filter(\n  task => task.urgency === \"Urgent\"\n);\n\nconst overdueTasks = tasks.filter(\n  task => task.urgency === \"Overdue\"\n);\n\nconst highPriorityTasks = tasks.filter(\n  task => task.priority === \"High\"\n);\n\nconst upcomingTasks = tasks.filter(\n  task => Number(task.days_remaining) >= 0 &&\n          Number(task.days_remaining) <= 3\n);\n\nconst taskList = tasks.map((task, index) => {\n  return `${index + 1}. ${task.subject} \u2014 ${task.task}\nDeadline: ${task.deadline}\nDays remaining: ${task.days_remaining}\nPriority: ${task.priority}\nUrgency: ${task.urgency}`;\n}).join(\"\\n\\n\");\n\nconst summaryData = `\nTotal pending tasks: ${totalTasks}\nUrgent tasks: ${urgentTasks.length}\nOverdue tasks: ${overdueTasks.length}\nHigh-priority tasks: ${highPriorityTasks.length}\nTasks due within 3 days: ${upcomingTasks.length}\n\nTasks:\n\n${taskList}\n`;\n\nreturn [{\n  json: {\n    hasTasks: true,\n    taskCount: totalTasks,\n    summaryData\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "fc1bd79d-f026-4dd5-9286-a2f174bbd12c",
+      "name": "Prepare Academic Summary"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-goog-api-key",
+              "value": "YOUR_GEMINI_API_KEY_HERE"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify(\"You are StudyFlow, an AI academic assistant.\\n\\nCreate a concise daily academic summary for a university student.\\n\\nYour summary should:\\n1. Identify the most important tasks.\\n2. Mention overdue or urgent tasks first.\\n3. Highlight deadlines within the next 3 days.\\n4. Suggest a practical study focus for today.\\n5. Avoid unnecessary explanations.\\n6. Use clear headings and bullet points.\\n\\nAcademic task data:\\n\" + $json.summaryData + \"\\n\\nReturn only the academic summary text.\") }}\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "cbccefc6-639b-4b4d-b0e0-aac1bbfe86eb",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\n\nconst summary =\n  response.candidates?.[0]?.content?.parts?.[0]?.text;\n\nif (!summary) {\n  throw new Error(\"AI academic summary was not returned.\");\n}\n\nreturn [{\n  json: {\n    summary\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "e5033d27-0d08-459e-99e7-e454d1b98c71",
+      "name": "Extract Summary"
+    },
+    {
+      "parameters": {
+        "fromEmail": "dulsarajayasuriya2003@gmail.com",
+        "toEmail": "dulsarabc@gmail.com",
+        "subject": "\ud83d\udcda StudyFlow \u2014 Daily Academic Summary",
+        "emailFormat": "text",
+        "text": "=Hi Dulsara,\n\nHere is your StudyFlow daily academic summary.\n\n{{ $json.summary }}\n\nHave a productive study day!\n\n\u2014 StudyFlow",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "79b5ade9-8dec-4c65-9f38-847e83a20ff8",
+      "name": "Send an Email",
+      "webhookId": "bdc422ca-259c-43ce-9cd4-08cc74fface9",
+      "credentials": {
+        "smtp": {
+          "id": "3ALU7bCAdXExa0Yy",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Prepare Academic Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Academic Summary": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Extract Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Summary": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8bb0c898-0077-484f-ac58-f21a45837b3e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "156680060cd7be8cee4916b03cbf374be351b048f64e7b50bc67d2fde986d804"
+  },
+  "nodeGroups": [],
+  "id": "DuOrVLSdHqIDIP5D",
+  "tags": []
+}
