@@ -6,24 +6,55 @@ import '../models/task.dart';
 class ApiService {
   static const String baseUrl = 'http://localhost:5678/webhook';
 
-  Future<List<Task>> getTasks() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/studyflow/tasks'),
+
+Future<List<Task>> getTasks() async {
+  final response = await http.get(
+    Uri.parse('$baseUrl/studyflow/tasks'),
+  );
+
+  if (response.statusCode != 200) {
+    throw Exception(
+      'Failed to load tasks: ${response.statusCode} ${response.body}',
     );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load tasks');
-    }
-
-    final data = jsonDecode(response.body);
-
-    final List<dynamic> taskList =
-        data is List ? data : (data['tasks'] ?? []);
-
-    return taskList
-        .map((json) => Task.fromJson(json))
-        .toList();
   }
+
+  if (response.body.trim().isEmpty) {
+    throw Exception(
+      'The tasks webhook returned an empty response. '
+      'Check the n8n Respond to Webhook node.',
+    );
+  }
+
+  dynamic data;
+
+  try {
+    data = jsonDecode(response.body);
+  } on FormatException {
+    throw Exception(
+      'The tasks webhook returned invalid JSON: ${response.body}',
+    );
+  }
+
+  final List<dynamic> taskList;
+
+  if (data is List) {
+    taskList = data;
+  } else if (data is Map<String, dynamic> &&
+      data['tasks'] is List) {
+    taskList = data['tasks'] as List<dynamic>;
+  } else {
+    throw Exception(
+      'Unexpected tasks response format: ${response.body}',
+    );
+  }
+
+  return taskList
+      .map((json) => Task.fromJson(
+            Map<String, dynamic>.from(json as Map),
+          ))
+      .toList();
+}
+
 
   Future<void> completeTask(int id) async {
     final response = await http.post(
@@ -102,6 +133,34 @@ Future<void> createTask({
     );
   }
 }
+
+Future<String> generateDailyPlan() async {
+  final response = await http.post(
+    Uri.parse('$baseUrl/studyflow/ai-planner'),
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({
+      'student': 'Dulsara',
+    }),
+  );
+
+  if (response.statusCode < 200 ||
+      response.statusCode >= 300) {
+    throw Exception(
+      'Failed to generate study plan: ${response.statusCode} ${response.body}',
+    );
+  }
+
+  final data = jsonDecode(response.body);
+
+  if (data is! Map<String, dynamic> ||
+      data['success'] != true ||
+      data['plan'] == null) {
+    throw Exception('Invalid AI planner response');
+  }
+
+  return data['plan'].toString();
+}
+
 
 
 }

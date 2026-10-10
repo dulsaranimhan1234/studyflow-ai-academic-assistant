@@ -35,4 +35,23 @@ class Task {
       status: json['status']?.toString() ?? 'pending',
     );
   }
+
+  int get calculatedDaysRemaining {
+    final parsedDeadline = DateTime.tryParse(deadline);
+
+    if (parsedDeadline == null) {
+      return daysRemaining;
+    }
+
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+
+    final dueDate = DateTime(
+      parsedDeadline.year,
+      parsedDeadline.month,
+      parsedDeadline.day,
+    );
+
+    return dueDate.difference(todayDate).inDays;
+  }
 }

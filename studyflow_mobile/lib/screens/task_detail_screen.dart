@@ -8,6 +8,7 @@ import 'edit_task_screen.dart';
 class TaskDetailScreen extends StatefulWidget {
   final Task task;
 
+
   const TaskDetailScreen({
     super.key,
     required this.task,
@@ -156,7 +157,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             _InfoTile(
               icon: Icons.timer_outlined,
               title: 'Days Remaining',
-              value: '${task.daysRemaining}',
+              value: '${task.calculatedDaysRemaining}',
             ),
             _InfoTile(
               icon: Icons.warning_amber_rounded,
