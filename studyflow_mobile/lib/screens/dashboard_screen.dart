@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import 'add_task_screen.dart';
 import 'study_plan_screen.dart';
 import 'task_detail_screen.dart';
+import '../services/auth_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -15,6 +16,34 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService _apiService = ApiService();
+
+  final AuthService _authService = AuthService();
+
+Future<void> _logout() async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Log out?'),
+      content: const Text(
+        'Are you sure you want to log out of StudyFlow?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Log out'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true || !mounted) return;
+
+  await _authService.logout();
+}
 
   List<Task> tasks = [];
   bool isLoading = true;
@@ -196,11 +225,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: 'Refresh tasks',
-            onPressed: loadTasks,
-            icon: const Icon(Icons.refresh),
+             tooltip: 'Refresh tasks',
+             onPressed: loadTasks,
+             icon: const Icon(Icons.refresh),
           ),
-          const SizedBox(width: 8),
+        IconButton(
+             tooltip: 'Log out',
+             onPressed: _logout,
+             icon: const Icon(Icons.logout),
+        ),
+         const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
