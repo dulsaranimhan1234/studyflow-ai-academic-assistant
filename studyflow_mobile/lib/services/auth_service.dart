@@ -1,6 +1,4 @@
-
 import 'package:firebase_auth/firebase_auth.dart';
-
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -27,6 +25,9 @@ class AuthService {
       password: password,
     );
   }
+  Future<String?> getIdToken() async {
+  return await _auth.currentUser?.getIdToken();
+}
 
   Future<void> logout() async {
     await _auth.signOut();

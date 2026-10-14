@@ -36,6 +36,20 @@ class Task {
     );
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'student': student,
+      'subject': subject,
+      'task': task,
+      'deadline': deadline,
+      'priority': priority,
+      'days_remaining': daysRemaining,
+      'urgency': urgency,
+      'status': status,
+    };
+  }
+
   int get calculatedDaysRemaining {
     final parsedDeadline = DateTime.tryParse(deadline);
 

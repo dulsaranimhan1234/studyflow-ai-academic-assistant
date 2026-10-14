@@ -72,7 +72,11 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         const SnackBar(content: Text('Task creation request sent')),
       );
 
-      Navigator.pop(context, true);
+      Navigator.pop(context, {
+        'student': _studentController.text.trim(),
+        'subject': _subjectController.text.trim(),
+        'task': _taskController.text.trim(),
+      });
     } catch (e) {
       if (!mounted) return;
 

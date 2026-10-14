@@ -7,43 +7,45 @@ import 'study_plan_screen.dart';
 import 'task_detail_screen.dart';
 import '../services/auth_service.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.apiService});
+
+  final ApiService? apiService;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final ApiService _apiService = ApiService();
+  late final ApiService _apiService = widget.apiService ?? ApiService();
 
   final AuthService _authService = AuthService();
 
-Future<void> _logout() async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Log out?'),
-      content: const Text(
-        'Are you sure you want to log out of StudyFlow?',
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('Are you sure you want to log out of StudyFlow?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Log out'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(dialogContext, true),
-          child: const Text('Log out'),
-        ),
-      ],
-    ),
-  );
+    );
 
-  if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) return;
 
-  await _authService.logout();
-}
+    await _authService.logout();
+  }
 
   List<Task> tasks = [];
   bool isLoading = true;
@@ -56,7 +58,25 @@ Future<void> _logout() async {
   @override
   void initState() {
     super.initState();
+    debugPrint('DASHBOARD INIT');
+    _printToken();
     loadTasks();
+  }
+
+  Future<void> _printToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    debugPrint('Signed-in user exists: ${user != null}');
+
+    if (user == null) return;
+
+    try {
+      final token = await user.getIdToken();
+      debugPrint(
+        'Firebase token obtained: ${token != null && token.isNotEmpty}',
+      );
+    } catch (_) {
+      debugPrint('Firebase token obtained: false');
+    }
   }
 
   Future<void> loadTasks() async {
@@ -81,49 +101,75 @@ Future<void> _logout() async {
 
       setState(() {
         isLoading = false;
-        errorMessage = e.toString();
+        errorMessage = e is ApiException
+            ? e.message
+            : 'Could not load tasks. Check your connection and try again.';
       });
     }
   }
 
   int get pendingCount => tasks.where((task) {
-        return task.status.toLowerCase() != 'completed';
-      }).length;
+    return task.status.toLowerCase() != 'completed';
+  }).length;
 
   int get completedCount => tasks.where((task) {
-        return task.status.toLowerCase() == 'completed';
-      }).length;
+    return task.status.toLowerCase() == 'completed';
+  }).length;
 
   int get urgentCount => tasks.where((task) {
-        return task.status.toLowerCase() != 'completed' &&
-            task.priority.toLowerCase() == 'high';
-      }).length;
+    return task.status.toLowerCase() != 'completed' &&
+        task.priority.toLowerCase() == 'high';
+  }).length;
 
   Future<void> openAddTaskScreen() async {
-    await Navigator.push(
+    final createdTask = await Navigator.push<Map<String, String>>(
       context,
-      MaterialPageRoute(
-        builder: (_) => const AddTaskScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const AddTaskScreen()),
     );
 
-    if (mounted) {
+    if (!mounted || createdTask == null) return;
+
+    for (var attempt = 0; attempt < 6; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+
       await loadTasks();
+      if (!mounted ||
+          tasks.any(
+            (task) =>
+                task.student.trim().toLowerCase() ==
+                    createdTask['student']?.trim().toLowerCase() &&
+                task.subject.trim().toLowerCase() ==
+                    createdTask['subject']?.trim().toLowerCase() &&
+                task.task.trim().toLowerCase() ==
+                    createdTask['task']?.trim().toLowerCase(),
+          )) {
+        return;
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Task was submitted, but has not appeared yet. Try refreshing shortly.',
+          ),
+        ),
+      );
     }
   }
 
   Future<void> openTaskDetails(Task task) async {
-  final updated = await Navigator.push<bool>(
-    context,
-    MaterialPageRoute(
-      builder: (_) => TaskDetailScreen(task: task),
-    ),
-  );
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => TaskDetailScreen(task: task)),
+    );
 
-  if (updated == true && mounted) {
-    await loadTasks();
+    if (updated == true && mounted) {
+      await loadTasks();
+    }
   }
-}
 
   Future<void> generateStudyPlan() async {
     setState(() {
@@ -145,7 +191,9 @@ Future<void> _logout() async {
 
       setState(() {
         isGeneratingPlan = false;
-        plannerError = 'Could not generate a study plan. Please try again.';
+        plannerError = e is ApiException
+            ? e.message
+            : 'Could not generate a study plan. Please try again.';
       });
     }
   }
@@ -155,9 +203,7 @@ Future<void> _logout() async {
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => StudyPlanScreen(plan: studyPlan!),
-      ),
+      MaterialPageRoute(builder: (_) => StudyPlanScreen(plan: studyPlan!)),
     );
   }
 
@@ -189,21 +235,16 @@ Future<void> _logout() async {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Task marked as completed'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Task marked as completed')));
 
       await loadTasks();
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not complete task: $e'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not complete task: $e')));
     }
   }
 
@@ -217,24 +258,21 @@ Future<void> _logout() async {
           children: [
             Icon(Icons.auto_awesome),
             SizedBox(width: 10),
-            Text(
-              'StudyFlow',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            Text('StudyFlow', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
           IconButton(
-             tooltip: 'Refresh tasks',
-             onPressed: loadTasks,
-             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh tasks',
+            onPressed: loadTasks,
+            icon: const Icon(Icons.refresh),
           ),
-        IconButton(
-             tooltip: 'Log out',
-             onPressed: _logout,
-             icon: const Icon(Icons.logout),
-        ),
-         const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Log out',
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
@@ -311,11 +349,7 @@ Future<void> _logout() async {
                 children: [
                   const Row(
                     children: [
-                      Icon(
-                        Icons.auto_awesome,
-                        color: Colors.white,
-                        size: 28,
-                      ),
+                      Icon(Icons.auto_awesome, color: Colors.white, size: 28),
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -333,39 +367,31 @@ Future<void> _logout() async {
                   const Text(
                     'Let StudyFlow AI organize your study tasks '
                     'and recommend what to focus on today.',
-                    style: TextStyle(
-                      color: Colors.white,
-                      height: 1.5,
-                    ),
+                    style: TextStyle(color: Colors.white, height: 1.5),
                   ),
                   const SizedBox(height: 18),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed:
-                          isGeneratingPlan ? null : generateStudyPlan,
+                      onPressed: isGeneratingPlan ? null : generateStudyPlan,
                       style: FilledButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: theme.colorScheme.primary,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 14,
-                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       icon: isGeneratingPlan
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.auto_awesome),
                       label: Text(
                         isGeneratingPlan
                             ? 'Generating your plan...'
                             : studyPlan == null
-                                ? 'Generate Study Plan'
-                                : 'Regenerate Study Plan',
+                            ? 'Generate Study Plan'
+                            : 'Regenerate Study Plan',
                       ),
                     ),
                   ),
@@ -374,9 +400,7 @@ Future<void> _logout() async {
                     const SizedBox(height: 12),
                     Text(
                       plannerError!,
-                      style: const TextStyle(
-                        color: Colors.white,
-                      ),
+                      style: const TextStyle(color: Colors.white),
                     ),
                   ],
 
@@ -391,17 +415,12 @@ Future<void> _logout() async {
                       ),
                       child: const Row(
                         children: [
-                          Icon(
-                            Icons.check_circle_outline,
-                            color: Colors.white,
-                          ),
+                          Icon(Icons.check_circle_outline, color: Colors.white),
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               'Your personalized study plan is ready.',
-                              style: TextStyle(
-                                color: Colors.white,
-                              ),
+                              style: TextStyle(color: Colors.white),
                             ),
                           ),
                         ],
@@ -415,9 +434,7 @@ Future<void> _logout() async {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
                           side: const BorderSide(color: Colors.white),
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 14,
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                         icon: const Icon(Icons.visibility_outlined),
                         label: const Text('View Full Study Plan'),
@@ -453,15 +470,10 @@ Future<void> _logout() async {
             if (isLoading)
               const Padding(
                 padding: EdgeInsets.all(36),
-                child: Center(
-                  child: CircularProgressIndicator(),
-                ),
+                child: Center(child: CircularProgressIndicator()),
               )
             else if (errorMessage != null)
-              _ErrorCard(
-                message: errorMessage!,
-                onRetry: loadTasks,
-              )
+              _ErrorCard(message: errorMessage!, onRetry: loadTasks)
             else if (tasks.isEmpty)
               Card(
                 child: Padding(
@@ -538,10 +550,7 @@ class _StatCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 16,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
         child: Column(
           children: [
             Icon(icon, color: color, size: 25),
@@ -605,12 +614,8 @@ class _TaskCard extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                isCompleted
-                    ? Icons.check_circle
-                    : Icons.radio_button_unchecked,
-                color: isCompleted
-                    ? Colors.green
-                    : theme.colorScheme.primary,
+                isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                color: isCompleted ? Colors.green : theme.colorScheme.primary,
                 size: 26,
               ),
               const SizedBox(width: 12),
@@ -686,10 +691,7 @@ class _InfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 9,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
@@ -717,10 +719,7 @@ class _ErrorCard extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorCard({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorCard({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -729,21 +728,14 @@ class _ErrorCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Icon(
-              Icons.cloud_off_outlined,
-              size: 40,
-              color: Colors.red,
-            ),
+            const Icon(Icons.cloud_off_outlined, size: 40, color: Colors.red),
             const SizedBox(height: 10),
             const Text(
               'Could not load tasks',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-            ),
+            Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: onRetry,

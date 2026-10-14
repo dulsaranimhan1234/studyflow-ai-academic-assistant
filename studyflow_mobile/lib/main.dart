@@ -36,8 +36,15 @@ class StudyFlowApp extends StatelessWidget {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool _tokenDiagnosticStarted = false;
 
   @override
   Widget build(BuildContext context) {
@@ -53,9 +60,14 @@ class AuthGate extends StatelessWidget {
         }
 
         if (snapshot.hasData) {
-  ApiService().debugFirebaseToken();
-  return const DashboardScreen();
-}
+          if (!_tokenDiagnosticStarted) {
+            _tokenDiagnosticStarted = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              ApiService().debugFirebaseToken();
+            });
+          }
+          return const DashboardScreen();
+        }
 
         return const LoginScreen();
       },
